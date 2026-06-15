@@ -1,0 +1,64 @@
+ISRB
+
+if (fase1==0)
+	pending_b=1
+	if (sender==None)
+		if (TAS(Lock))
+			if (sender==None)
+				mod_fase2=sender=B
+			lock=0
+		else
+			RTE
+	
+	pending_B=0
+	var=READPIAB
+
+	if (sender==B)				#non si fa la doppia condizione qui
+		buf[ch_tot]=var
+		ch_b++
+		ch_tot++
+		if (ch_b==K)
+			ch_b=0
+			cont_mex++
+			if (cont_mex==N)
+				fase1=1		#non devo recupera C perché faccio in modo che non si sospenda		cont_mex=0
+				sender=None	#per usarlo nella fase 2
+	RTE
+
+if (fase2==0)
+	if(mod_fase2=B)
+		if (end_B==0)
+			buf_b[ch_b]=READPIAB
+			ch_b++
+			if (ch_b==k)
+				end_b=1
+				if (end_c==1)
+					fase2=1
+		RTE
+	if (mod_fase2==c)
+		pending_B=1
+		if(sender==None)		#non c'è bisogno di vedere end_b perché è alternato
+			if (TAS(Lock))
+				if (sender==None)
+					sender=B
+				lock=0
+			else
+				RTE
+		if (sender==B and pending_b==1)
+			buf_B[ch_b]=READPIAB
+			ch_b++
+			if(ch_b==k)
+				end_b=1
+				if (end_c==1)
+					fase2=1
+				else
+					sender=C
+					if(pending_c==1)
+						ch_c++
+						buf_c[ch_c-1]=READPIAC
+
+						
+				
+
+RTE		
+		
