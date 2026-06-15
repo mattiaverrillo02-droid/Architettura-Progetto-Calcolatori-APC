@@ -1,0 +1,50 @@
+	ORG	$8000
+PIADB	EQU	$2006	*dato PIA canale B
+CTRLB	EQU	$2007
+N	EQU	10	*num caratteri di un messaggio 
+CONT	DC.W	0	*contatore dei caratteri 
+MEX	DC.B	1,2,3,4,5,6,7,8,9,10
+
+MAIN	JSR	INITPIA	
+	MOVEA.L	#PIADB,A0
+	MOVEA.L 	#MEX,A1
+	MOVE.W 	#1,CONT
+	
+	MOVE.W	SR,D1
+	ANDI.W	#$D8FF,D1	
+	MOVE.W	D1,SR
+
+	MOVE.B	(A0),D2		* Effettua la lettura fittizia
+	MOVE.B 	(A1),(A0)	* Scrivi il primo messaggio
+
+LOOP	JMP	LOOP
+
+
+	
+
+INITPIA	MOVE.B	#0,CTRLB
+	MOVE.B	#$FF,PIADB
+	MOVE.B	#%00100101,CTRLB
+
+	RTS
+
+*interruzione livello	4 mappato a $70
+	ORG	$8200
+INT4	MOVE.B 	(A0),D2		* Lettura fittizia
+	MOVE.W	CONT,D0
+	MOVE.B 	(A1,D0),(A0)	* Invia il carattere successivo
+	ADDI.W 	#1,D0
+	MOVE.W	D0,CONT
+	CMP.W	#N,D0		*D0-N= Cont-N 
+	BNE		EI4
+	MOVE.W	#0,D0
+	MOVE.W	#0,CONT
+EI4 	RTE
+	END	MAIN
+
+
+
+
+
+
+

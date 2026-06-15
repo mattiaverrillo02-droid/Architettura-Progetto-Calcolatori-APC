@@ -1,0 +1,327 @@
+PIADAB      EQU     $2004
+CTRLAB      EQU     $2005
+PIADAC      EQU     $2008
+CTRLAC      EQU     $2009
+
+N           EQU     10
+K           EQU     10
+NONE        EQU     -1
+B           EQU     0
+C           EQU     1
+
+            ORG     $8000
+
+cont_B	DC.W    0		*fase 1 contatore caratteri B
+mex_B	DC.W    0	*fase 1 contatore messaggi B
+cont_C	DC.W    0
+mex_C	DC.W    0
+
+sender      DC.W    NONE
+byte_tot    DC.W    0		*contatore caratteri fase 2
+ch_C        DC.W    0		*contatore caratteri di C fase 2
+K_B         DC.W    0		*contatore dei messaggi fase 2 di B
+K_C         DC.W    0		*contatore dei messaggi fase 2 di C
+ch_B        DC.W    0		*contatore caratteri di C fase 2
+mex         DC.W    0		*contatore generale messaggi fase2
+
+fase_1      DC.B    0
+fase_2      DC.B    0
+end_b       DC.B    0
+end_c       DC.B    0
+lock        DC.B    0
+
+buf_B       DS.B    100
+buf_C       DS.B    100
+buf         DS.B    100
+
+            ORG     $8200       * Spostato per non essere sovrascritto da ISRB
+
+MAIN        JSR     INIT
+            MOVE.W  SR,D0
+            ANDI.W  #$D8FF,D0
+            MOVE.W  D0,SR
+LOOP        JMP     LOOP
+
+INIT        MOVE.B  #0,CTRLAB
+            MOVE.B  #0,PIADAB
+            MOVE.B  #%00100101,CTRLAB
+
+            MOVE.B  #0,CTRLAC
+            MOVE.B  #0,PIADAC
+            MOVE.B  #%00100101,CTRLAC
+            RTS
+
+            ORG     $8500
+
+ISRB        MOVEM.L D0-D2/A0-A1,-(SP)
+
+            MOVE.B  fase_1,D0
+            CMP.B   #0,D0
+            BNE     fase2
+            MOVE.B  end_b,D0
+            CMP.B   #0,D0
+            BNE     fine		*se fase2=1 sicuramente B l'aveva finita
+            
+            MOVEA.L #PIADAB,A0
+            MOVEA.L #buf_B,A1
+	MOVE.W  mex_B,D0    * Carica il numero di messaggi completati
+            MULU.W  #N,D0       * Moltiplica per N (10 byte per messaggio)
+            ADD.W   cont_B,D0   * Somma l'indice del carattere corrente. D0 ora contiene l'offset assoluto (da 0 a 99)
+            MOVE.B  (A0),(A1,D0)
+	MOVE.W cont_B,D1
+            ADD.W   #1,D1
+            MOVE.W  D1,cont_B
+
+            CMP.W   #N,D1
+            BNE     fine
+            MOVE.W  #0,cont_B
+
+            MOVE.W  mex_B,D0
+            ADDI.W  #1,D0
+            MOVE.W  D0,mex_B
+            CMP.W   #K,D0
+            BNE     fine
+
+            MOVE.B  #1,end_b
+            MOVE.W  #0,mex_B
+
+            MOVE.B  end_c,D0
+            CMP.B   #1,D0
+            BNE     fine
+
+            MOVE.B  #1,fase_1
+            MOVE.B  #0,end_b
+            MOVE.B  #0,end_c
+
+            MOVE.B  CTRLAC,D0
+            ANDI.B  #$80,D0
+            BEQ     fine
+
+            MOVE.W  #C,sender
+            MOVE.W  byte_tot,D0
+            MOVE.W  D0,D1
+            ADDI.W  #1,D0
+            MOVE.W  D0,byte_tot
+            MOVE.W  D0,ch_C
+
+            MOVEA.L #PIADAC,A0
+            MOVEA.L #buf,A1
+            MOVE.B  (A0),(A1,D1)
+            BRA     fine
+
+fase2	MOVE.B  fase_2,D0
+            CMP.B   #0,D0		*D0-0 se fa 0 allora fase2=0 e passo altrimenti se 1 esco
+            BNE     fine        
+
+            MOVE.W  sender,D0
+            CMP.W   #NONE,D0
+            BNE     check
+            MOVE.W  #(K-1),D1
+            CMP.W   K_B,D1
+            BEQ     fine
+
+            TAS     lock
+            BNE     fine
+            MOVE.W  sender,D0
+            CMP.W   #NONE,D0
+            BNE     RELLOCK
+            MOVE.W  #B,sender
+
+RELLOCK     MOVE.B  #0,lock
+
+check       MOVE.W  sender,D0
+            CMP.W   #B,D0
+            BNE     fine
+
+            MOVE.B  CTRLAB,D0
+            ANDI.B  #$80,D0
+            BEQ     fine
+
+lettura     MOVEA.L #PIADAB,A0
+            MOVE.W  byte_tot,D0
+            MOVE.W  ch_B,D1
+            MOVEA.L #buf,A1
+            MOVE.B  (A0),(A1,D0)
+
+            ADDI.W  #1,D0
+            ADDI.W  #1,D1
+            MOVE.W  D0,byte_tot
+            MOVE.W  D1,ch_B
+
+            CMP.W   #N,D1
+            BNE     fine
+
+            MOVE.W  #0,ch_B
+            MOVE.W  K_B,D1
+            ADDI.W  #1,D1
+            MOVE.W  D1,K_B
+
+            MOVE.W  #NONE,sender
+
+            MOVE.W  mex,D1
+            ADDI.W  #1,D1
+            MOVE.W  D1,mex
+            CMP.W   #K,D1
+            BGE     UPPH2
+
+            MOVE.B  CTRLAC,D1
+            ANDI.B  #$80,D1
+            BEQ     fine
+
+            MOVE.W  #C,sender
+            MOVE.W  ch_C,D1
+            ADDI.W  #1,D1
+            MOVE.W  D1,ch_C
+
+            MOVE.W  D0,D1
+            ADDI.W  #1,D0
+            MOVE.W  D0,byte_tot
+            MOVEA.L #PIADAC,A0
+            MOVE.B  (A0),(A1,D1)
+            BRA     fine
+
+UPPH2       MOVE.B  #1,fase_2
+
+fine        MOVEM.L (SP)+,D0-D2/A0-A1
+            RTE
+
+            ORG     $8800
+
+ISRC        MOVEM.L D0-D2/A0-A1,-(SP)
+
+            MOVE.B  fase_1,D0
+            CMP.B   #0,D0
+            BNE     fase2_C
+            MOVE.B  end_c,D0
+            CMP.B   #0,D0
+            BNE     fine
+
+            MOVEA.L #PIADAC,A0
+            MOVEA.L #buf_C,A1
+	MOVE.W  mex_C,D0    * Carica il numero di messaggi completati
+            MULU.W  #N,D0       * Moltiplica per N (10 byte per messaggio)
+            ADD.W   cont_C,D0   * Somma l'indice del carattere corrente. D0 ora contiene l'offset assoluto (da 0 a 99)
+            MOVE.B  (A0),(A1,D0)
+	MOVE.W cont_C,D1
+            ADD.W   #1,D1
+            MOVE.W  D1,cont_C
+
+            CMP.W   #N,D1
+            BNE     fine_C
+            MOVE.W  #0,cont_C	
+
+            MOVE.W  mex_C,D0
+            ADDI.W  #1,D0
+            MOVE.W  D0,mex_C
+            CMP.W   #K,D0
+            BNE     fine_C
+
+            MOVE.B  #1,end_c
+            MOVE.W  #0,mex_C
+
+            MOVE.B  end_b,D0
+            CMP.B   #1,D0
+            BNE     fine_C
+
+            MOVE.B  #1,fase_1
+            MOVE.B  #0,end_b
+            MOVE.B  #0,end_c
+
+            MOVE.B  CTRLAB,D0
+            ANDI.B  #$80,D0
+            BEQ     fine_C
+
+            MOVE.W  #B,sender
+            MOVE.W  byte_tot,D0
+            MOVE.W  D0,D1
+            ADDI.W  #1,D0
+            MOVE.W  D0,byte_tot
+	MOVE.W  D0,ch_B
+
+            MOVEA.L #PIADAB,A0
+            MOVEA.L #buf,A1
+            MOVE.B  (A0),(A1,D1)
+            BRA     fine_C
+
+fase2_C     MOVE.B  fase_2,D0
+            CMP.B   #0,D0
+            BNE     fine_C
+
+            MOVE.W  sender,D0
+            CMP.W   #NONE,D0
+            BNE     check_C
+
+            MOVE.W  #(K-1),D1
+            CMP.W   K_C,D1
+            BEQ     fine_C
+
+            TAS     lock
+            BNE     fine_C
+            MOVE.W  sender,D0
+            CMP.W   #NONE,D0
+            BNE     RELLOCK_C
+            MOVE.W  #C,sender
+
+RELLOCK_C   MOVE.B  #0,lock
+
+check_C     MOVE.W  sender,D0
+            CMP.W   #C,D0
+            BNE     fine_C
+
+            MOVE.B  CTRLAC,D0
+            ANDI.B  #$80,D0
+            BEQ     fine_C
+
+lettura_C   MOVEA.L #PIADAC,A0
+            MOVE.W  byte_tot,D0
+            MOVE.W  ch_C,D1
+            MOVEA.L #buf,A1
+            MOVE.B  (A0),(A1,D0)
+
+            ADDI.W  #1,D0
+            ADDI.W  #1,D1
+            MOVE.W  D0,byte_tot
+            MOVE.W  D1,ch_C
+
+            CMP.W   #N,D1
+            BNE     fine_C
+
+            MOVE.W  #0,ch_C
+            MOVE.W  K_C,D1
+            ADDI.W  #1,D1
+            MOVE.W  D1,K_C
+
+            MOVE.W  #NONE,sender
+
+            MOVE.W  mex,D1
+            ADDI.W  #1,D1
+            MOVE.W  D1,mex
+            CMP.W   #K,D1
+            BGE     UPPH2_C
+
+            MOVE.B  CTRLAB,D1
+            ANDI.B  #$80,D1
+            BEQ     fine_C
+
+            MOVE.W  #B,sender
+            MOVE.W  ch_B,D1
+            ADDI.W  #1,D1
+            MOVE.W  D1,ch_B
+
+            MOVE.W  D0,D1
+            ADDI.W  #1,D0
+            MOVE.W  D0,byte_tot
+            MOVEA.L #PIADAB,A0
+            MOVE.B  (A0),(A1,D1)
+            BRA     fine_C
+
+UPPH2_C     MOVE.B  #1,fase_2
+
+fine_C      MOVEM.L (SP)+,D0-D2/A0-A1
+            RTE
+            END     MAIN
+
+
+
+
+
