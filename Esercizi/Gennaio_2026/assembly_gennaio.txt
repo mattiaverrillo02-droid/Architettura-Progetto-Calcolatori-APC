@@ -1,0 +1,138 @@
+	ORG $8200
+
+ISRB
+        * Salvataggio di tutti i registri utilizzati (inclusi D3, A2, A3 per la Fase 2)
+        MOVEM.L D0-D3/A0-A3,-(SP)
+
+        MOVEA.L #PIADAB,A0
+        MOVE.W  CH_B,D0
+        MOVE.W  CH_TOT,D1
+        MOVEA.L #Buf,A1
+        
+        CMP.B   #0,fase1         * Controlla se siamo in Fase 1
+        BNE     fase2             * Se fase1 != 0 (è 1), salta direttamente alla Fase 2
+
+        * --- FASE 1 ---
+        
+
+        MOVE.B  SENDER,D2        
+        CMP.B   #NONE,D2
+        BNE     CHECK-LETT
+
+        TAS     LOCK              
+        BNE     fine
+        MOVE.B  SENDER,D2        
+        CMP.B   #NONE,D2
+        BNE     REL_LOCK
+
+        MOVE.B  #B,SENDER
+        MOVE.B  #B,mod_fase2
+
+REL_LOCK 
+        MOVE.B  #0,LOCK
+	MOVE.B	(A0),D2
+
+CHECK_LETT 
+        MOVE.B  SENDER,D3
+        CMP.B   #B,D3
+        BNE     fine
+        
+        MOVE.B  D2,(A1,D1)   
+        ADDI.W  #1,D0              
+        ADDI.W  #1,D1              
+        MOVE.W  D1,CH-TOT
+        MOVE.W  D0,CH-B
+        CMP.W   #K,D0
+        BNE     fine
+        
+        MOVE.W  #0,CH_B
+        MOVE.W  CONT_MEX,D2
+        ADDI.W  #1,D2
+        MOVE.W  D2,CONT-MEX
+        CMP.W   #N,D2
+        BNE     fine
+        
+        MOVE.B  #1,fase1         
+        MOVE.B  #NONE,SENDER
+        MOVE.W  #0,CONT_MEX      * Azzera il contatore per usi futuri
+        BRA     fine
+
+        * --- FASE 2 ---
+fase2 
+        MOVE.B  fase2,D2
+        CMP.B   #0,D2
+        BNE     fine
+
+mod-fase2-1 
+        MOVE.B  mod_fase2,D2
+        CMP.B   #B,D2
+        BNE     mod_fase2_2
+        MOVE.B  end_B,D2
+        CMP.B   #0,D2
+        BNE     fine
+        MOVE.B  (A0),(A1,D0)
+        ADDI.W  #1,D0
+        MOVE.W  D0,CH_B
+        CMP.W   #K,CH_B
+        BNE     fine
+        MOVE.B  #1,end_B
+        MOVE.B  end_c,D2
+        CMP.B   #1,D2
+        BNE     fine
+        MOVE.B  #1,fase2
+        BRA     fine
+
+mod-fase2-2 
+        MOVE.B  mod-fase2,D2
+        CMP.B   #C,D2
+        BNE     fine
+        MOVE.B  SENDER,D2
+        CMP.B   #NONE,D2
+        BNE     CHECK-B
+        
+        TAS     LOCK
+        BNE     fine
+        MOVE.B  SENDER,D2
+        CMP.B   #NONE,D2
+        BNE     REL_LOCK2
+        MOVE.B  #B,SENDER
+        
+REL_LOCK2 
+        MOVE.B  #0,LOCK
+
+CHECK_B 
+        MOVE.B  SENDER,D2
+        CMP.B   #B,D2
+        BNE     fine
+        
+        MOVE.B  CTRLAB,D2
+        ANDI.B  #$80,D2
+        BEQ     fine            
+        
+        MOVE.B  (A0),(A1,D0)
+        ADDI.B  #1,D0            
+        MOVE.W  D0,CH_B
+        CMP.W   #K,D0
+        BNE     fine
+        MOVE.B  #1,end_B
+        MOVE.B  end_c,D2         
+        CMP.B   #1,D2
+        BNE     CHECK_C
+        MOVE.B  #1,fase2
+        BRA     fine
+
+CHECK-C 
+        MOVE.B  #C,SENDER
+        MOVE.B  CH_C,D2
+        MOVE.B  CH_C,D3          
+        ADDI.B  #1,D2
+        MOVE.B  D2,CH_C          * Salva il contatore incrementato in memoria
+        
+        MOVEA.L #PIADAC,A2
+        MOVEA.L #Bufc,A3        
+        MOVE.B  (A2),(A3,D3)    
+
+fine    
+        * Ripristino completo dei registri prima dell'RTE
+        MOVEM.L (SP)+,D0-D3/A0-A3
+        RTE
